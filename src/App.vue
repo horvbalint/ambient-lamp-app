@@ -1,53 +1,67 @@
 <template>
-  <div class="container">
-    <div v-if="connecting" class="connecting">
-      <h1>Connecting to the lamp...</h1>
+  <div class="app-wrapper">
+    <div class="container">
+      <div v-if="connecting" class="connecting">
+        <h1>Connecting to the lamp...</h1>
+      </div>
+
+      <div class="top-bar">
+        <div ref="preview" class="preview"/>
+      </div>
+
+      <div class="picker" ref="picker">
+        <color-column
+          ref="hue"
+          v-model:value="hue"
+          :min="0"
+          :max="360"
+          :gradient="generateHueGradient"
+          @end="sendColor(['hue'], true)"
+          @update:value="cycling = false"
+        >
+          <template #top-button>
+            <div class="top-button" @click="cycle()">
+              Cycle
+            </div>
+          </template>
+        </color-column>
+
+        <color-column
+          ref="sat"
+          v-model:value="sat"
+          :min="0"
+          :max="100"
+          :gradient="generateSatGradient"
+          with-buttons
+          @min="sat = 0"
+          @max="sat = 100"
+          @end="sendColor(['sat'], true)"
+        />
+
+        <color-column
+          ref="val"
+          v-model:value="val"
+          :min="0"
+          :max="100"
+          :gradient="generateValGradient"
+          with-buttons
+          @min="val = 0"
+          @max="val = 100"
+          @end="sendColor(['val'], true)"
+        />
+      </div>
     </div>
 
-    <div class="top-bar">
-      <div ref="preview" class="preview"/>
-    </div>
+    <div class="container connect-page">
+      <div class="inputs">
+        <input placeholder="Wifi credentials" v-model="wifi.ssid"/>
+        <input placeholder="Wifi password" type="password" v-model="wifi.password"/>
+      </div>
 
-    <div class="picker" ref="picker">
-      <color-column
-        ref="hue"
-        v-model:value="hue"
-        :min="0"
-        :max="360"
-        :gradient="generateHueGradient"
-        @end="sendColor(['hue'], true)"
-        @update:value="cycling = false"
-      >
-        <template #top-button>
-          <div class="top-button" @click="cycle()">
-            Cycle
-          </div>
-        </template>
-      </color-column>
-
-      <color-column
-        ref="sat"
-        v-model:value="sat"
-        :min="0"
-        :max="100"
-        :gradient="generateSatGradient"
-        with-buttons
-        @min="sat = 0"
-        @max="sat = 100"
-        @end="sendColor(['sat'], true)"
-      />
-
-      <color-column
-        ref="val"
-        v-model:value="val"
-        :min="0"
-        :max="100"
-        :gradient="generateValGradient"
-        with-buttons
-        @min="val = 0"
-        @max="val = 100"
-        @end="sendColor(['val'], true)"
-      />
+      <div class="buttons">
+        <button v-if="!connecting" @click="resetWifiCredentials()">Forget Wifi network</button>
+        <button @click="sendWifiCredentials()">Connect to Wifi</button>
+      </div>
     </div>
   </div>
 </template>
@@ -72,30 +86,16 @@ export default {
       cycling: false,
       startingHue: null,
       lastTick: 0,
+      wifi: {
+        ssid: '',
+        password: '',
+      }
     }
   },
   created() {
     this.updateColor()
 
-    this.connecting = true
-
-    TauriApi.invoke('connect')
-      .then( () => TauriApi.invoke('get_status') )
-      .then( res => {
-        let status = JSON.parse(res)
-
-        this.hue = status.hue
-        this.sat = status.sat * 100
-        this.val = status.val * 100
-
-        if(status.cycling)
-          this.cycleColor(status.duration)
-        else
-          this.updateColor()
-
-        this.connecting = false
-      })
-      .catch( err => console.error(err) )
+    this.connectToLamp()
   },
   mounted() {
     this.$refs.preview.style.background = this.color
@@ -159,6 +159,27 @@ export default {
 
       requestAnimationFrame(calcFrame)
     },
+    connectToLamp() {
+      this.connecting = true
+
+      TauriApi.invoke('connect')
+        .then( () => TauriApi.invoke('get_status') )
+        .then( res => {
+          let status = JSON.parse(res)
+
+          this.hue = status.hue
+          this.sat = status.sat * 100
+          this.val = status.val * 100
+
+          if(status.cycling)
+            this.cycleColor(status.duration)
+          else
+            this.updateColor()
+
+          this.connecting = false
+        })
+        .catch( err => console.error(err) )
+    },
     cycle() {
       TauriApi.invoke("send_cycle")
         .then( res => this.cycleColor(Number(res)) )
@@ -167,7 +188,22 @@ export default {
     reset() {
       TauriApi.invoke("send_reset")
         .catch( err => console.error(err) )
-    }
+    },
+    sendWifiCredentials() {
+      TauriApi.invoke("send_wifi_credentials", this.wifi)
+        .then( () => {
+          this.wifi.ssid = ''
+          this.wifi.password = ''
+        })
+        .catch( err => console.error(err) )
+    },
+    resetWifiCredentials() {
+      TauriApi.invoke("send_reset")
+        .then( () => {
+          setTimeout(this.connectToLamp, 1500) // we need to wait 1 sec before the lamp resets
+        })
+        .catch( err => console.error(err) )
+    },
   },
   watch: {
     hue() {
@@ -190,7 +226,7 @@ export default {
       this.sendColor(['val'])
 
       this.$refs.preview.style.background = this.color
-    }
+    },
   },  
   components: {
     ColorColumn
@@ -199,8 +235,42 @@ export default {
 </script>
 
 <style scoped>
+.app-wrapper {
+  height: 100%;
+  display: flex;
+  overflow: auto;
+  scroll-snap-type: x mandatory;
+}
+.connect-page {
+  justify-content: space-between;
+}
+.connect-page h1 {
+  font-size: 25px;
+  color: white;
+}
+.connect-page .inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.connect-page .inputs input {
+  border-radius: 10px;
+  border: none;
+  height: 40px;
+  padding: 0 10px;
+}
+.connect-page .buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.connect-page button {
+  border-radius: 10px;
+  border: none;
+  height: 40px;
+}
 .connecting {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   bottom: 0;
@@ -216,8 +286,10 @@ export default {
   font-size: 28px;
 }
 .container {
+  scroll-snap-align: start;
+  flex-shrink: 0;
+  width: 100%;
   height: 100%;
-  max-width: 500px;
   display: flex;
   margin: 0 auto;
   flex-direction: column;

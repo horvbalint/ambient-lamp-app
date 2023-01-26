@@ -47,6 +47,7 @@ impl AppBuilder {
         get_status,
         send_cycle,
         send_reset,
+        send_wifi_credentials,
       ])
       .run(tauri::generate_context!())
       .expect("error while running tauri application");
@@ -118,6 +119,15 @@ async fn send_reset(state: tauri::State<'_, AppState>) -> Result<(), String> {
     let url = format!("http://{lamp_ip}/reset");
     reqwest::get(url).await
         .map_err(|err| format!("Failed to send cycle: {err:#?}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn send_wifi_credentials(ssid: String, password: String) -> Result<(), String> {
+    let url = format!("http://192.168.71.1/connect?ssid={ssid}&password={password}");
+    reqwest::get(url).await
+        .map_err(|err| format!("Failed to send wifi credentials: {err:#?}"))?;
 
     Ok(())
 }

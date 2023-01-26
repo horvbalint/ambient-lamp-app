@@ -16,7 +16,11 @@ body {
   bottom: 0;
   right: 0;
   background: black;
-} 
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
 
 #app {
   height: 100%;
