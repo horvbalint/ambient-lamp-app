@@ -1,7 +1,7 @@
 #![allow(unstable_name_collisions)]
 use std::{collections::HashMap, sync::RwLock};
 
-use tauri::App;
+use tauri::{App, api::http::ClientBuilder};
 use itertools::Itertools;
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 
@@ -92,7 +92,7 @@ async fn send_color(state: tauri::State<'_, AppState>, components: HashMap<&str,
         .collect();
 
     let url = format!("http://{lamp_ip}/set?{query_params}");
-    reqwest::get(url).await
+    reqwest::Client::new().post(url).send().await
         .map_err(|err| format!("Failed to send color to the lamp: {err:#?}"))?;
 
     Ok(())
@@ -117,7 +117,7 @@ async fn send_reset(state: tauri::State<'_, AppState>) -> Result<(), String> {
     let lamp_ip = state.ip.read().unwrap().clone();
 
     let url = format!("http://{lamp_ip}/reset");
-    reqwest::get(url).await
+    reqwest::Client::new().post(url).send().await
         .map_err(|err| format!("Failed to send cycle: {err:#?}"))?;
 
     Ok(())
